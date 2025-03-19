@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-num_simulations = 2500
+num_simulations = 250000
 balls_remaining = 63
 total_score = 76  
 
