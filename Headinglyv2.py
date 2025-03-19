@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-num_simulations = 250
+num_simulations = 2500
 balls_remaining = 63
 total_score = 76  
 
@@ -26,18 +26,11 @@ bowler_probabilities = {
     },
 }
 
-# Normalise probabilities to ensure they sum to 1
-# for bowler in bowler_probabilities:
-#     for batsman in bowler_probabilities[bowler]:
-#         total = sum(bowler_probabilities[bowler][batsman].values())
-#         for outcome in bowler_probabilities[bowler][batsman]:
-#             bowler_probabilities[bowler][batsman][outcome] /= total
-
-# define the bol
+# Define the specific bowling sequence
 bowlers_sequence = (
-    ['Pattinson'] * 4 + ['Lyon'] * 6 + ['Pattinson'] * 7 + ['Lyon'] * 6 + 
+    ['Pattinson'] * 4 + ['Lyon'] * 6 + ['Pattinson'] * 6 + ['Lyon'] * 6 + 
     ['Pattinson'] * 6 + ['Cummins'] * 6 + ['Hazlewood'] * 6 + ['Lyon'] * 6 + 
-    ['Cummins'] * 6 + ['Lyon'] * 6 + ['Cummins'] * 4
+    ['Cummins'] * 6 + ['Lyon'] * 6 + ['Cummins'] * 6
 )
 
 def simulate_match():
@@ -48,23 +41,28 @@ def simulate_match():
     aggression_factor = 1.5  # Initial aggression factor for Stokes
     boundaries_hit = 0
     over_length = 4 #only 4 balls in the first over
-    while balls_faced < balls_remaining and runs < total_score:
-        current_bowler = bowlers_sequence[balls_faced]  # Get bowler for the current ball
+    win_with_limit = None
+    win_without_limit = None
+
+    while win_without_limit is None:
+        current_bowler = bowlers_sequence[balls_faced % len(bowlers_sequence)]  # Loop through bowlers
         batter = 'stokes' if stokes_on_strike else 'leach'
         probabilities = bowler_probabilities[current_bowler][batter].copy()
+        
         if stokes_on_strike:
             # Apply aggression factor to 4s and 6s
             probabilities['4'] *= aggression_factor
             probabilities['6'] *= aggression_factor
-            probabilities['out'] *=  1 + (aggression_factor * 0.1)  # Ensure risk increases correctly
+            probabilities['out'] *= 1 + (aggression_factor * 0.1)  # Increase risk dynamically
             # Normalize probabilities
             total = sum(probabilities.values())
             for outcome in probabilities:
                 probabilities[outcome] /= total
+        
         outcome = np.random.choice(list(probabilities.keys()), p=list(probabilities.values()))
         
         if outcome == 'out':
-            return 0  # England loses
+            return (win_with_limit or 0, 0)  # England loses
         elif outcome == '0':
             pass
         elif outcome == '1':
@@ -75,44 +73,58 @@ def simulate_match():
                 stokes_on_strike = not stokes_on_strike  # Rotate strike
         elif outcome == '2':
             runs += 2
-            
         elif outcome == '3':
             runs += 3
-            
             stokes_on_strike = not stokes_on_strike  # Rotate strike
         elif outcome in ['4', '6']:
             runs += int(outcome)
             boundaries_hit += 1
             aggression_factor += 0.1  # Increase aggression with each boundary
-            print(aggression_factor)
+        
         balls_faced += 1
         balls_in_over += 1
         
-        # Check if over is complete and switch strike
+        # Check for win with limit
+        if runs >= total_score:
+            win_without_limit = 1
+            if win_with_limit is None:
+                win_with_limit = 1 if balls_faced <= balls_remaining else 0
+        
+        if balls_faced == balls_remaining and win_with_limit is None:
+            win_with_limit = 1 if runs >= total_score else 0
+        
         if balls_in_over == over_length:
             stokes_on_strike = not stokes_on_strike
             balls_in_over = 0
             over_length = 6  # Set all subsequent overs to 6 balls
     
-    return 1 if runs >= total_score else 0  # England wins if they reach required runs
+    return win_with_limit, win_without_limit
 
 # Run Monte Carlo Simulations
-wins = 0
+wins_with_limit = 0
+wins_without_limit = 0
+
 for i in range(num_simulations):
-    wins += simulate_match()
+    win_limit, win_no_limit = simulate_match()
+    wins_with_limit += win_limit
+    wins_without_limit += win_no_limit
     if (i + 1) % 10000 == 0:
         print(f'Iteration {i + 1}/{num_simulations} completed')
 
-win_probability = wins / num_simulations
+win_probability_with_limit = wins_with_limit / num_simulations
+win_probability_without_limit = wins_without_limit / num_simulations
 
 # Display Results
-print(wins)
-print(f'Estimated Probability of England Winning: {win_probability:.4f}')
+print(f'Wins with ball limit: {wins_with_limit}')
+print(f'Estimated Probability of England Winning (With Ball Limit): {win_probability_with_limit:.4f}')
+print(f'Wins without ball limit: {wins_without_limit}')
+print(f'Estimated Probability of England Winning (Without Ball Limit): {win_probability_without_limit:.4f}')
 
 # Plot histogram
-plt.bar(['Loss', 'Win'], [num_simulations - wins, wins], color=['red', 'green'])
+plt.bar(['Loss (With Limit)', 'Win (With Limit)', 'Loss (No Limit)', 'Win (No Limit)'],
+        [num_simulations - wins_with_limit, wins_with_limit, num_simulations - wins_without_limit, wins_without_limit],
+        color=['red', 'green', 'red', 'blue'])
 plt.xlabel('Outcome')
 plt.ylabel('Frequency')
 plt.title('Monte Carlo Simulation of England’s Victory at Headingley')
 plt.show()
-
